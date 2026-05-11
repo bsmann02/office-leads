@@ -5,6 +5,7 @@ const io = require('socket.io')(http);
 
 const DAILY_GOAL = 15;
 
+// Memory storage (Survives as long as the server is awake)
 let stats = { 
     "Daniel": { leads: 0, meetings: 0, invoices: 0 }, 
     "Lucas": { leads: 0, meetings: 0, invoices: 0 }, 
@@ -15,21 +16,27 @@ app.get('/', (req, res) => { res.send(dashboardHTML()); });
 app.get('/update', (req, res) => { res.send(updatePortalHTML()); });
 
 io.on('connection', (socket) => {
-    socket.emit('refresh', { stats, goal: DAILY_GOAL });
+    // When the TV connects, it checks if it has data to "re-hydrate" the server
+    socket.emit('requestSync');
+
     socket.on('syncFromTV', (savedData) => {
-        stats = savedData;
-        io.emit('refresh', { stats, goal: DAILY_GOAL });
+        if (savedData) {
+            stats = savedData;
+            io.emit('refresh', { stats, goal: DAILY_GOAL });
+        }
     });
+
     socket.on('updateStats', (data) => {
         if (stats[data.name]) {
             stats[data.name][data.type] = data.val; 
+            // Send update to TV and force a LocalStorage save
             io.emit('updateUI', { name: data.name, stats: stats, goal: DAILY_GOAL });
         }
     });
 });
 
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => { console.log('Unishippers Air Horn Direct Build Live'); });
+http.listen(PORT, () => { console.log('Unishippers Leaderboard Live'); });
 
 function dashboardHTML() {
     return `<!DOCTYPE html><body style="background:#050505; color:white; font-family:sans-serif; text-align:center; margin:0; overflow:hidden;">
@@ -42,10 +49,10 @@ function dashboardHTML() {
             }
             .updated { animation: celebrate 1.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 10; }
             .leader-crown { position: absolute; top: -40px; left: 50%; transform: translateX(-50%); font-size: 60px; filter: drop-shadow(0 0 15px gold); z-index: 20; }
-            #unlock-overlay { position: fixed; top: 10px; right: 10px; background: rgba(227, 27, 35, 0.8); padding: 10px 20px; border-radius: 10px; font-weight: bold; cursor: pointer; z-index: 100; display: block; }
+            #unlock-overlay { position: fixed; top: 10px; right: 10px; background: rgba(0, 229, 255, 0.8); padding: 10px 20px; border-radius: 10px; font-weight: bold; cursor: pointer; z-index: 100; display: block; border: none; color: black; }
         </style>
         
-        <div id="unlock-overlay" onclick="unlockAudio()">⚠️ CLICK SCREEN TO ENABLE HORN</div>
+        <button id="unlock-overlay" onclick="unlockAudio()">🔊 CLICK TO START BOARD</button>
 
         <div style="background: #111; padding: 25px; border-bottom: 3px solid #e31b23; display: flex; flex-direction: column; align-items: center;">
             <h1 style="font-size:3.5vw; margin:0; letter-spacing:5px; color:white; text-transform: uppercase; font-weight: 900;">Sales Leaderboard</h1>
@@ -60,35 +67,32 @@ function dashboardHTML() {
         <script src="/socket.io/socket.io.js"></script>
         <script>
             const socket = io();
-            // DIRECT MP3 LINK
-            const horn = new Audio('https://actions.google.com/sounds/v1/sports/crowd_cheer.ogg');
-            const airhorn = new Audio('https://www.soundboard.com/handler/DownLoadTrack.ashx?cliptitle=Air+Horn+3&filename=24/246473-be99955e-1823-4f96-857c-2e652a6572e8.mp3');
+            // New reliable "Crowd Cheer" sound
+            const soundEffect = new Audio('https://actions.google.com/sounds/v1/sports/crowd_cheer.ogg');
 
             function unlockAudio() {
-                airhorn.play().then(() => {
-                    airhorn.pause();
-                    airhorn.currentTime = 0;
+                soundEffect.play().then(() => {
+                    soundEffect.pause();
+                    soundEffect.currentTime = 0;
                     document.getElementById('unlock-overlay').style.display = 'none';
-                }).catch(e => console.log("Still blocked"));
+                }).catch(e => console.log("Audio interaction required."));
             }
 
             function getToday() { return new Date().toLocaleDateString(); }
-            const localData = localStorage.getItem('unishippers_stats');
-            const savedDate = localStorage.getItem('unishippers_date');
 
-            if (localData && savedDate === getToday()) {
-                socket.emit('syncFromTV', JSON.parse(localData));
-            } else {
-                localStorage.setItem('unishippers_date', getToday());
-                localStorage.removeItem('unishippers_stats');
-            }
+            socket.on('requestSync', () => {
+                const localData = localStorage.getItem('unishippers_stats');
+                const savedDate = localStorage.getItem('unishippers_date');
+                if (localData && savedDate === getToday()) {
+                    socket.emit('syncFromTV', JSON.parse(localData));
+                }
+            });
 
             socket.on('updateUI', (data) => {
-                airhorn.currentTime = 0;
-                airhorn.play().catch(e => {
-                    document.getElementById('unlock-overlay').style.display = 'block';
-                });
+                soundEffect.currentTime = 0;
+                soundEffect.play().catch(e => { document.getElementById('unlock-overlay').style.display = 'block'; });
                 confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 }, colors: ['#00ff88', '#e31b23', '#ffffff'] });
+                
                 localStorage.setItem('unishippers_stats', JSON.stringify(data.stats));
                 localStorage.setItem('unishippers_date', getToday());
                 render(data.stats, data.name, data.goal);
