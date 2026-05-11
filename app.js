@@ -3,7 +3,8 @@ const app = express();
 const http = require('http').Server(app);
 const io = require('socket.io')(http);
 
-const DAILY_GOAL = 30;
+// Updated Daily Goal
+const DAILY_GOAL = 15;
 
 let stats = { 
     "Daniel": { leads: 0, meetings: 0, invoices: 0 }, 
@@ -29,7 +30,7 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => { console.log('Unishippers Final Build Live'); });
+http.listen(PORT, () => { console.log('Unishippers AirHorn Build Live'); });
 
 function dashboardHTML() {
     return `<!DOCTYPE html><body style="background:#050505; color:white; font-family:sans-serif; text-align:center; margin:0; overflow:hidden;">
@@ -41,26 +42,24 @@ function dashboardHTML() {
                 100% { background: #111; transform: scale(1); box-shadow: none; } 
             }
             .updated { animation: celebrate 1.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 10; }
-            .leader-crown { position: absolute; top: -35px; left: 50%; transform: translateX(-50%); font-size: 45px; filter: drop-shadow(0 0 10px gold); z-index: 20; }
+            .leader-crown { position: absolute; top: -35px; left: 50%; transform: translateX(-50%); font-size: 55px; filter: drop-shadow(0 0 15px gold); z-index: 20; }
         </style>
         
-        <div style="background: #111; padding: 15px; border-bottom: 3px solid #e31b23; display: flex; flex-direction: column; align-items: center;" onclick="bell.play()">
-            <div style="display: flex; align-items: center; justify-content: center; gap: 25px; width: 100%;">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/Unishippers_Logo.svg/2560px-Unishippers_Logo.svg.png" style="height: 55px; filter: brightness(0) invert(1);">
-                <h1 style="font-size:2.8vw; margin:0; letter-spacing:4px; color:white; text-transform: uppercase; font-weight: 900;">Sales Leaderboard</h1>
-            </div>
-            <div style="width: 70%; background: #333; height: 14px; border-radius: 10px; margin-top: 15px; overflow: hidden; border: 1px solid #444;">
+        <div style="background: #111; padding: 20px; border-bottom: 3px solid #e31b23; display: flex; flex-direction: column; align-items: center;" onclick="horn.play()">
+            <h1 style="font-size:3vw; margin:0; letter-spacing:5px; color:white; text-transform: uppercase; font-weight: 900;">Sales Leaderboard</h1>
+            <div style="width: 70%; background: #333; height: 16px; border-radius: 10px; margin-top: 15px; overflow: hidden; border: 1px solid #444;">
                 <div id="goal-bar" style="width: 0%; background: linear-gradient(90deg, #00e5ff, #00ff88); height: 100%; transition: width 1s ease-in-out;"></div>
             </div>
-            <div id="goal-text" style="font-size: 1vw; color: #aaa; margin-top: 8px; font-weight: bold; letter-spacing: 1px;">TEAM LEAD GOAL: 0 / ${DAILY_GOAL}</div>
+            <div id="goal-text" style="font-size: 1.2vw; color: #aaa; margin-top: 10px; font-weight: bold;">DAILY LEAD GOAL: 0 / ${DAILY_GOAL}</div>
         </div>
 
-        <div id="display" style="display:flex; justify-content:space-around; align-items:stretch; height:75vh; padding:50px 30px; gap:25px;"></div>
+        <div id="display" style="display:flex; justify-content:space-around; align-items:stretch; height:75vh; padding:60px 30px; gap:25px;"></div>
         
         <script src="/socket.io/socket.io.js"></script>
         <script>
             const socket = io();
-            const bell = new Audio('https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3');
+            // New Stadium Air Horn Sound
+            const horn = new Audio('https://www.myinstants.com/media/sounds/air-horn-club-sample-1.mp3');
 
             function getToday() { return new Date().toLocaleDateString(); }
 
@@ -75,9 +74,9 @@ function dashboardHTML() {
             }
 
             socket.on('updateUI', (data) => {
-                bell.currentTime = 0;
-                bell.play().catch(e => {});
-                confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 }, colors: ['#00ff88', '#e31b23', '#ffffff'] });
+                horn.currentTime = 0;
+                horn.play().catch(e => console.log("Click TV to enable audio"));
+                confetti({ particleCount: 180, spread: 90, origin: { y: 0.6 }, colors: ['#00ff88', '#e31b23', '#ffffff'] });
                 
                 localStorage.setItem('unishippers_stats', JSON.stringify(data.stats));
                 localStorage.setItem('unishippers_date', getToday());
@@ -89,30 +88,31 @@ function dashboardHTML() {
             function render(data, updatedName, goal) {
                 let html = '';
                 let totalLeads = 0;
-                let maxLeads = 0;
+                let maxPoints = 0;
 
                 for(let name in data) {
                     totalLeads += data[name].leads;
-                    if(data[name].leads > maxLeads) maxLeads = data[name].leads;
+                    let currentPoints = data[name].leads + data[name].meetings + data[name].invoices;
+                    if(currentPoints > maxPoints) maxPoints = currentPoints;
                 }
 
                 const percent = Math.min((totalLeads / goal) * 100, 100);
                 document.getElementById('goal-bar').style.width = percent + '%';
-                document.getElementById('goal-text').innerText = 'TEAM LEAD GOAL: ' + totalLeads + ' / ' + goal;
+                document.getElementById('goal-text').innerText = 'DAILY LEAD GOAL: ' + totalLeads + ' / ' + goal;
 
                 for(let name in data) {
                     let updateClass = (name === updatedName) ? 'updated' : '';
-                    // Crown logic: Shows on anyone tied for the lead if they have at least 1 lead
-                    let hasCrown = (data[name].leads === maxLeads && maxLeads > 0);
+                    let points = data[name].leads + data[name].meetings + data[name].invoices;
+                    let hasCrown = (points === maxPoints && maxPoints > 0);
                     let crown = hasCrown ? '<div class="leader-crown">👑</div>' : '';
                     
-                    html += '<div class="' + updateClass + '" style="background:#111; border-radius:30px; flex:1; border: 2px solid #333; display:flex; flex-direction:column; position:relative;">' +
+                    html += '<div class="' + updateClass + '" style="background:#111; border-radius:40px; flex:1; border: 2px solid #333; display:flex; flex-direction:column; position:relative;">' +
                             crown +
-                            '<div style="background:#222; padding:18px; font-size:3.5vw; font-weight:bold; color:#00ff88; border-radius: 30px 30px 0 0; border-bottom: 1px solid #333;">' + name + '</div>' +
+                            '<div style="background:#222; padding:20px; font-size:3.8vw; font-weight:bold; color:#00ff88; border-radius: 40px 40px 0 0;">' + name + '</div>' +
                             '<div style="flex:1; display:flex; flex-direction:column; justify-content:center; padding:20px;">' +
-                                '<div><div style="color:#aaa; font-size:1.8vw; font-weight:bold; letter-spacing: 1px;">LEADS</div><div style="font-size:13vw; font-weight:900; line-height:1; color:white;">' + data[name].leads + '</div></div>' +
-                                '<div style="margin:25px 0;"><div style="color:#00e5ff; font-size:1.4vw; font-weight:bold;">MEETINGS SET</div><div style="font-size:6.5vw; font-weight:bold;">' + data[name].meetings + '</div></div>' +
-                                '<div><div style="color:#ff0055; font-size:1.2vw; font-weight:bold;">INVOICES</div><div style="font-size:4vw; font-weight:bold;">' + data[name].invoices + '</div></div>' +
+                                '<div><div style="color:#aaa; font-size:1.8vw; font-weight:bold;">LEADS</div><div style="font-size:13vw; font-weight:900; line-height:1; color:white;">' + data[name].leads + '</div></div>' +
+                                '<div style="margin:25px 0;"><div style="color:#00e5ff; font-size:1.4vw; font-weight:bold;">MEETINGS SET</div><div style="font-size:7vw; font-weight:bold;">' + data[name].meetings + '</div></div>' +
+                                '<div><div style="color:#ff0055; font-size:1.2vw; font-weight:bold;">INVOICES</div><div style="font-size:4.5vw; font-weight:bold;">' + data[name].invoices + '</div></div>' +
                             '</div></div>';
                 }
                 document.getElementById('display').innerHTML = html;
@@ -124,8 +124,7 @@ function updatePortalHTML() {
     return `<!DOCTYPE html><meta name="viewport" content="width=device-width, initial-scale=1.0">
     <body style="font-family:sans-serif; background:#111; color:white; padding:20px; text-align:center;">
         <div style="max-width:450px; margin:auto; background:#222; padding:30px; border-radius:20px; border:1px solid #444;">
-            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/Unishippers_Logo.svg/2560px-Unishippers_Logo.svg.png" style="height: 40px; margin-bottom: 20px; filter: brightness(0) invert(1);">
-            <h2 style="color:white; margin-top:0;">Update Stats</h2>
+            <h2 style="color:white; margin-top:0; letter-spacing:1px;">Update Stats</h2>
             <select id="n" style="font-size:1.2rem; width:100%; padding:15px; margin-bottom:20px; background:#333; color:white; border-radius:10px; border:none;">
                 <option>Daniel</option><option>Lucas</option><option>Cooper</option>
             </select>
