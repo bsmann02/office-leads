@@ -3,7 +3,6 @@ const app = express();
 const http = require('http').Server(app);
 const io = require('socket.io')(http);
 
-// Updated Daily Goal
 const DAILY_GOAL = 15;
 
 let stats = { 
@@ -30,24 +29,27 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => { console.log('Unishippers AirHorn Build Live'); });
+http.listen(PORT, () => { console.log('Unishippers Air Horn Direct Build Live'); });
 
 function dashboardHTML() {
     return `<!DOCTYPE html><body style="background:#050505; color:white; font-family:sans-serif; text-align:center; margin:0; overflow:hidden;">
         <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
         <style>
             @keyframes celebrate { 
-                0% { background: #111; transform: scale(1); box-shadow: none; } 
+                0% { background: #111; transform: scale(1); } 
                 20% { background: #00ff88; transform: scale(1.08); box-shadow: 0 0 80px #00ff88; } 
-                100% { background: #111; transform: scale(1); box-shadow: none; } 
+                100% { background: #111; transform: scale(1); } 
             }
             .updated { animation: celebrate 1.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 10; }
-            .leader-crown { position: absolute; top: -35px; left: 50%; transform: translateX(-50%); font-size: 55px; filter: drop-shadow(0 0 15px gold); z-index: 20; }
+            .leader-crown { position: absolute; top: -40px; left: 50%; transform: translateX(-50%); font-size: 60px; filter: drop-shadow(0 0 15px gold); z-index: 20; }
+            #unlock-overlay { position: fixed; top: 10px; right: 10px; background: rgba(227, 27, 35, 0.8); padding: 10px 20px; border-radius: 10px; font-weight: bold; cursor: pointer; z-index: 100; display: block; }
         </style>
         
-        <div style="background: #111; padding: 20px; border-bottom: 3px solid #e31b23; display: flex; flex-direction: column; align-items: center;" onclick="horn.play()">
-            <h1 style="font-size:3vw; margin:0; letter-spacing:5px; color:white; text-transform: uppercase; font-weight: 900;">Sales Leaderboard</h1>
-            <div style="width: 70%; background: #333; height: 16px; border-radius: 10px; margin-top: 15px; overflow: hidden; border: 1px solid #444;">
+        <div id="unlock-overlay" onclick="unlockAudio()">⚠️ CLICK SCREEN TO ENABLE HORN</div>
+
+        <div style="background: #111; padding: 25px; border-bottom: 3px solid #e31b23; display: flex; flex-direction: column; align-items: center;">
+            <h1 style="font-size:3.5vw; margin:0; letter-spacing:5px; color:white; text-transform: uppercase; font-weight: 900;">Sales Leaderboard</h1>
+            <div style="width: 70%; background: #333; height: 18px; border-radius: 10px; margin-top: 15px; overflow: hidden; border: 1px solid #444;">
                 <div id="goal-bar" style="width: 0%; background: linear-gradient(90deg, #00e5ff, #00ff88); height: 100%; transition: width 1s ease-in-out;"></div>
             </div>
             <div id="goal-text" style="font-size: 1.2vw; color: #aaa; margin-top: 10px; font-weight: bold;">DAILY LEAD GOAL: 0 / ${DAILY_GOAL}</div>
@@ -58,11 +60,19 @@ function dashboardHTML() {
         <script src="/socket.io/socket.io.js"></script>
         <script>
             const socket = io();
-            // New Stadium Air Horn Sound
-            const horn = new Audio('https://www.myinstants.com/media/sounds/air-horn-club-sample-1.mp3');
+            // DIRECT MP3 LINK
+            const horn = new Audio('https://actions.google.com/sounds/v1/sports/crowd_cheer.ogg');
+            const airhorn = new Audio('https://www.soundboard.com/handler/DownLoadTrack.ashx?cliptitle=Air+Horn+3&filename=24/246473-be99955e-1823-4f96-857c-2e652a6572e8.mp3');
+
+            function unlockAudio() {
+                airhorn.play().then(() => {
+                    airhorn.pause();
+                    airhorn.currentTime = 0;
+                    document.getElementById('unlock-overlay').style.display = 'none';
+                }).catch(e => console.log("Still blocked"));
+            }
 
             function getToday() { return new Date().toLocaleDateString(); }
-
             const localData = localStorage.getItem('unishippers_stats');
             const savedDate = localStorage.getItem('unishippers_date');
 
@@ -74,10 +84,11 @@ function dashboardHTML() {
             }
 
             socket.on('updateUI', (data) => {
-                horn.currentTime = 0;
-                horn.play().catch(e => console.log("Click TV to enable audio"));
-                confetti({ particleCount: 180, spread: 90, origin: { y: 0.6 }, colors: ['#00ff88', '#e31b23', '#ffffff'] });
-                
+                airhorn.currentTime = 0;
+                airhorn.play().catch(e => {
+                    document.getElementById('unlock-overlay').style.display = 'block';
+                });
+                confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 }, colors: ['#00ff88', '#e31b23', '#ffffff'] });
                 localStorage.setItem('unishippers_stats', JSON.stringify(data.stats));
                 localStorage.setItem('unishippers_date', getToday());
                 render(data.stats, data.name, data.goal);
@@ -96,23 +107,21 @@ function dashboardHTML() {
                     if(currentPoints > maxPoints) maxPoints = currentPoints;
                 }
 
-                const percent = Math.min((totalLeads / goal) * 100, 100);
-                document.getElementById('goal-bar').style.width = percent + '%';
+                document.getElementById('goal-bar').style.width = Math.min((totalLeads / goal) * 100, 100) + '%';
                 document.getElementById('goal-text').innerText = 'DAILY LEAD GOAL: ' + totalLeads + ' / ' + goal;
 
                 for(let name in data) {
                     let updateClass = (name === updatedName) ? 'updated' : '';
                     let points = data[name].leads + data[name].meetings + data[name].invoices;
-                    let hasCrown = (points === maxPoints && maxPoints > 0);
-                    let crown = hasCrown ? '<div class="leader-crown">👑</div>' : '';
+                    let crown = (points === maxPoints && maxPoints > 0) ? '<div class="leader-crown">👑</div>' : '';
                     
                     html += '<div class="' + updateClass + '" style="background:#111; border-radius:40px; flex:1; border: 2px solid #333; display:flex; flex-direction:column; position:relative;">' +
                             crown +
-                            '<div style="background:#222; padding:20px; font-size:3.8vw; font-weight:bold; color:#00ff88; border-radius: 40px 40px 0 0;">' + name + '</div>' +
+                            '<div style="background:#222; padding:20px; font-size:4vw; font-weight:bold; color:#00ff88; border-radius: 40px 40px 0 0;">' + name + '</div>' +
                             '<div style="flex:1; display:flex; flex-direction:column; justify-content:center; padding:20px;">' +
-                                '<div><div style="color:#aaa; font-size:1.8vw; font-weight:bold;">LEADS</div><div style="font-size:13vw; font-weight:900; line-height:1; color:white;">' + data[name].leads + '</div></div>' +
-                                '<div style="margin:25px 0;"><div style="color:#00e5ff; font-size:1.4vw; font-weight:bold;">MEETINGS SET</div><div style="font-size:7vw; font-weight:bold;">' + data[name].meetings + '</div></div>' +
-                                '<div><div style="color:#ff0055; font-size:1.2vw; font-weight:bold;">INVOICES</div><div style="font-size:4.5vw; font-weight:bold;">' + data[name].invoices + '</div></div>' +
+                                '<div><div style="color:#aaa; font-size:2vw; font-weight:bold;">LEADS</div><div style="font-size:14vw; font-weight:900; line-height:1; color:white;">' + data[name].leads + '</div></div>' +
+                                '<div style="margin:25px 0;"><div style="color:#00e5ff; font-size:1.5vw; font-weight:bold;">MEETINGS SET</div><div style="font-size:8vw; font-weight:bold;">' + data[name].meetings + '</div></div>' +
+                                '<div><div style="color:#ff0055; font-size:1.3vw; font-weight:bold;">INVOICES</div><div style="font-size:5vw; font-weight:bold;">' + data[name].invoices + '</div></div>' +
                             '</div></div>';
                 }
                 document.getElementById('display').innerHTML = html;
