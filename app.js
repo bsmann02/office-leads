@@ -27,27 +27,23 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => { console.log('Board Live - Fixed Overlay'); });
+http.listen(PORT, () => { console.log('Board Live'); });
 
 function dashboardHTML() {
     return `<!DOCTYPE html><body style="background:#050505; color:white; font-family:sans-serif; text-align:center; margin:0; overflow:hidden;">
         <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
         <style>
-            @keyframes celebrate { 
-                0% { background: #111; transform: scale(1); } 
-                20% { background: #00ff88; transform: scale(1.05); box-shadow: 0 0 50px #00ff88; } 
-                100% { background: #111; transform: scale(1); } 
-            }
+            @keyframes celebrate { 0% { background: #111; transform: scale(1); } 20% { background: #00ff88; transform: scale(1.05); } 100% { background: #111; transform: scale(1); } }
             .updated { animation: celebrate 1.2s ease-out; }
-            .card { background:#111; border-radius:30px; flex:1; border: 1px solid #333; position:relative; transition: all 0.3s ease; }
+            .card { background:#111; border-radius:30px; flex:1; border: 1px solid #333; position:relative; }
             .leader-crown { position: absolute; top: -45px; left: 50%; transform: translateX(-50%); font-size: 60px; display:none; }
-            #btn-overlay { position: fixed; inset:0; background: rgba(0,0,0,0.95); color: white; border: none; font-size: 30px; cursor: pointer; z-index: 1000; font-weight: bold; display: flex; align-items: center; justify-content: center; }
+            #btn-overlay { position: fixed; inset:0; background: rgba(227,27,35,0.95); color: white; border: none; font-size: 30px; cursor: pointer; z-index: 1000; font-weight: bold; display: flex; align-items: center; justify-content: center; }
         </style>
         
-        <div id="btn-overlay" onclick="startBoard()">CLICK ONCE TO START BOARD</div>
+        <div id="btn-overlay" onclick="startBoard()">CLICK TO ACTIVATE SOUND & BOARD</div>
 
         <div style="background: #111; padding: 20px; border-bottom: 3px solid #e31b23;">
-            <h1 style="font-size:3vw; margin:0; letter-spacing:3px;">SALES LEADERBOARD</h1>
+            <h1 style="font-size:3vw; margin:0;">SALES LEADERBOARD</h1>
             <div style="width: 60%; background: #333; height: 12px; border-radius: 10px; margin: 10px auto; overflow: hidden;">
                 <div id="goal-bar" style="width: 0%; background: #00ff88; height: 100%; transition: width 1s;"></div>
             </div>
@@ -69,16 +65,19 @@ function dashboardHTML() {
         <script src="/socket.io/socket.io.js"></script>
         <script>
             const socket = io();
-            const sound = new Audio('https://www.myinstants.com/media/sounds/level-up-191.mp3');
+            const sound = new Audio('https://www.myinstants.com/media/sounds/ding-sound-effect_2.mp3');
+            const silentLoop = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=');
+            silentLoop.loop = true;
 
             function startBoard() {
-                // Immediately hide the overlay so it doesn't get stuck
                 document.getElementById('btn-overlay').style.display = 'none';
-                // Trigger sound permission
+                // Play silent loop to keep the audio engine "awake"
+                silentLoop.play();
+                // Test the real sound once
                 sound.play().then(() => {
                     sound.pause();
                     sound.currentTime = 0;
-                }).catch(e => console.log("Audio unlock failed, but overlay is gone."));
+                });
             }
 
             socket.on('requestSync', () => {
@@ -89,7 +88,7 @@ function dashboardHTML() {
             socket.on('updateUI', (data) => {
                 updateElements(data.stats, data.name, data.goal);
                 sound.currentTime = 0;
-                sound.play().catch(e => console.log("Sound blocked"));
+                sound.play().catch(e => console.log("Sound Error"));
                 confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
                 localStorage.setItem('unishippers_stats', JSON.stringify(data.stats));
             });
@@ -97,32 +96,23 @@ function dashboardHTML() {
             socket.on('refresh', (data) => { updateElements(data.stats, null, data.goal); });
 
             function updateElements(data, updatedName, goal) {
-                let totalLeads = 0;
-                let maxPoints = 0;
-
+                let totalLeads = 0; let maxPoints = 0;
                 for(let n in data) {
                     totalLeads += data[n].leads;
                     let p = data[n].leads + data[n].meetings + data[n].invoices;
                     if(p > maxPoints) maxPoints = p;
                 }
-
                 document.getElementById('goal-bar').style.width = (totalLeads/goal*100) + '%';
                 document.getElementById('goal-text').innerText = 'DAILY LEAD GOAL: ' + totalLeads + ' / ' + goal;
-
                 for(let n in data) {
                     const card = document.getElementById('card-' + n);
                     const pts = data[n].leads + data[n].meetings + data[n].invoices;
-                    
                     document.getElementById('leads-' + n).innerText = data[n].leads;
                     document.getElementById('meetings-' + n).innerText = data[n].meetings;
                     document.getElementById('invoices-' + n).innerText = data[n].invoices;
-                    
                     document.getElementById('crown-' + n).style.display = (pts === maxPoints && maxPoints > 0) ? 'block' : 'none';
-                    
                     if(n === updatedName) {
-                        card.classList.remove('updated');
-                        void card.offsetWidth; 
-                        card.classList.add('updated');
+                        card.classList.remove('updated'); void card.offsetWidth; card.classList.add('updated');
                     }
                 }
             }
@@ -131,7 +121,7 @@ function dashboardHTML() {
 
 function updatePortalHTML() {
     return `<!DOCTYPE html><body style="font-family:sans-serif; background:#111; color:white; text-align:center; padding:20px;">
-        <div style="max-width:400px; margin:auto; background:#222; padding:20px; border-radius:20px;">
+        <div style="max-width:400px; margin:auto; background:#222; padding:20px; border-radius:20px; border:1px solid #444;">
             <h2>Update Stats</h2>
             <select id="n" style="width:100%; padding:10px; margin-bottom:10px;"><option>Daniel</option><option>Lucas</option><option>Cooper</option></select>
             <select id="t" style="width:100%; padding:10px; margin-bottom:10px;"><option value="leads">Leads</option><option value="meetings">Meetings</option><option value="invoices">Invoices</option></select>
