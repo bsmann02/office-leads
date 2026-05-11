@@ -4,8 +4,6 @@ const http = require('http').Server(app);
 const io = require('socket.io')(http);
 
 const DAILY_GOAL = 15;
-
-// Memory storage (Survives as long as the server is awake)
 let stats = { 
     "Daniel": { leads: 0, meetings: 0, invoices: 0 }, 
     "Lucas": { leads: 0, meetings: 0, invoices: 0 }, 
@@ -16,27 +14,21 @@ app.get('/', (req, res) => { res.send(dashboardHTML()); });
 app.get('/update', (req, res) => { res.send(updatePortalHTML()); });
 
 io.on('connection', (socket) => {
-    // When the TV connects, it checks if it has data to "re-hydrate" the server
     socket.emit('requestSync');
-
     socket.on('syncFromTV', (savedData) => {
-        if (savedData) {
-            stats = savedData;
-            io.emit('refresh', { stats, goal: DAILY_GOAL });
-        }
+        if (savedData) { stats = savedData; io.emit('refresh', { stats, goal: DAILY_GOAL }); }
     });
-
     socket.on('updateStats', (data) => {
         if (stats[data.name]) {
             stats[data.name][data.type] = data.val; 
-            // Send update to TV and force a LocalStorage save
+            // This sends ONLY the data, not a page instruction
             io.emit('updateUI', { name: data.name, stats: stats, goal: DAILY_GOAL });
         }
     });
 });
 
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => { console.log('Unishippers Leaderboard Live'); });
+http.listen(PORT, () => { console.log('Board Live - No-Refresh Mode'); });
 
 function dashboardHTML() {
     return `<!DOCTYPE html><body style="background:#050505; color:white; font-family:sans-serif; text-align:center; margin:0; overflow:hidden;">
@@ -44,117 +36,126 @@ function dashboardHTML() {
         <style>
             @keyframes celebrate { 
                 0% { background: #111; transform: scale(1); } 
-                20% { background: #00ff88; transform: scale(1.08); box-shadow: 0 0 80px #00ff88; } 
+                20% { background: #00ff88; transform: scale(1.05); box-shadow: 0 0 50px #00ff88; } 
                 100% { background: #111; transform: scale(1); } 
             }
-            .updated { animation: celebrate 1.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 10; }
-            .leader-crown { position: absolute; top: -40px; left: 50%; transform: translateX(-50%); font-size: 60px; filter: drop-shadow(0 0 15px gold); z-index: 20; }
-            #unlock-overlay { position: fixed; top: 10px; right: 10px; background: rgba(0, 229, 255, 0.8); padding: 10px 20px; border-radius: 10px; font-weight: bold; cursor: pointer; z-index: 100; display: block; border: none; color: black; }
+            .updated { animation: celebrate 1.2s ease-out; }
+            .card { background:#111; border-radius:30px; flex:1; border: 1px solid #333; position:relative; transition: all 0.3s ease; }
+            .leader-crown { position: absolute; top: -45px; left: 50%; transform: translateX(-50%); font-size: 60px; display:none; }
+            #btn { position: fixed; inset:0; background: rgba(0,0,0,0.9); color: white; border: none; font-size: 30px; cursor: pointer; z-index: 1000; font-weight: bold; }
         </style>
         
-        <button id="unlock-overlay" onclick="unlockAudio()">🔊 CLICK TO START BOARD</button>
+        <button id="btn" onclick="startBoard()">CLICK ONCE TO START BOARD</button>
 
-        <div style="background: #111; padding: 25px; border-bottom: 3px solid #e31b23; display: flex; flex-direction: column; align-items: center;">
-            <h1 style="font-size:3.5vw; margin:0; letter-spacing:5px; color:white; text-transform: uppercase; font-weight: 900;">Sales Leaderboard</h1>
-            <div style="width: 70%; background: #333; height: 18px; border-radius: 10px; margin-top: 15px; overflow: hidden; border: 1px solid #444;">
-                <div id="goal-bar" style="width: 0%; background: linear-gradient(90deg, #00e5ff, #00ff88); height: 100%; transition: width 1s ease-in-out;"></div>
+        <div style="background: #111; padding: 20px; border-bottom: 3px solid #e31b23;">
+            <h1 style="font-size:3vw; margin:0; letter-spacing:3px;">SALES LEADERBOARD</h1>
+            <div style="width: 60%; background: #333; height: 12px; border-radius: 10px; margin: 10px auto; overflow: hidden;">
+                <div id="goal-bar" style="width: 0%; background: #00ff88; height: 100%; transition: width 1s;"></div>
             </div>
-            <div id="goal-text" style="font-size: 1.2vw; color: #aaa; margin-top: 10px; font-weight: bold;">DAILY LEAD GOAL: 0 / ${DAILY_GOAL}</div>
+            <div id="goal-text" style="font-size: 1.2vw; color: #aaa;">DAILY LEAD GOAL: 0 / ${DAILY_GOAL}</div>
         </div>
 
-        <div id="display" style="display:flex; justify-content:space-around; align-items:stretch; height:75vh; padding:60px 30px; gap:25px;"></div>
+        <div id="display" style="display:flex; justify-content:space-around; height:75vh; padding:40px 20px; gap:20px;">
+            ${TEAM_NAMES_REPS()}
+        </div>
         
         <script src="/socket.io/socket.io.js"></script>
         <script>
             const socket = io();
-            // New reliable "Crowd Cheer" sound
-            const soundEffect = new Audio('https://actions.google.com/sounds/v1/sports/crowd_cheer.ogg');
+            const sound = new Audio('https://www.myinstants.com/media/sounds/level-up-191.mp3');
 
-            function unlockAudio() {
-                soundEffect.play().then(() => {
-                    soundEffect.pause();
-                    soundEffect.currentTime = 0;
-                    document.getElementById('unlock-overlay').style.display = 'none';
-                }).catch(e => console.log("Audio interaction required."));
+            function startBoard() {
+                sound.play().then(() => {
+                    sound.pause();
+                    document.getElementById('btn').style.display = 'none';
+                });
             }
 
             function getToday() { return new Date().toLocaleDateString(); }
 
             socket.on('requestSync', () => {
                 const localData = localStorage.getItem('unishippers_stats');
-                const savedDate = localStorage.getItem('unishippers_date');
-                if (localData && savedDate === getToday()) {
-                    socket.emit('syncFromTV', JSON.parse(localData));
-                }
+                if (localData) socket.emit('syncFromTV', JSON.parse(localData));
             });
 
             socket.on('updateUI', (data) => {
-                soundEffect.currentTime = 0;
-                soundEffect.play().catch(e => { document.getElementById('unlock-overlay').style.display = 'block'; });
-                confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 }, colors: ['#00ff88', '#e31b23', '#ffffff'] });
-                
+                // UPDATE WITHOUT REFRESHING PAGE
+                updateElements(data.stats, data.name, data.goal);
+                sound.currentTime = 0;
+                sound.play();
+                confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
                 localStorage.setItem('unishippers_stats', JSON.stringify(data.stats));
-                localStorage.setItem('unishippers_date', getToday());
-                render(data.stats, data.name, data.goal);
             });
 
-            socket.on('refresh', (data) => { render(data.stats, null, data.goal); });
+            socket.on('refresh', (data) => { updateElements(data.stats, null, data.goal); });
 
-            function render(data, updatedName, goal) {
-                let html = '';
+            function updateElements(data, updatedName, goal) {
                 let totalLeads = 0;
                 let maxPoints = 0;
 
-                for(let name in data) {
-                    totalLeads += data[name].leads;
-                    let currentPoints = data[name].leads + data[name].meetings + data[name].invoices;
-                    if(currentPoints > maxPoints) maxPoints = currentPoints;
+                // Calculate totals
+                for(let n in data) {
+                    totalLeads += data[n].leads;
+                    let p = data[n].leads + data[n].meetings + data[n].invoices;
+                    if(p > maxPoints) maxPoints = p;
                 }
 
-                document.getElementById('goal-bar').style.width = Math.min((totalLeads / goal) * 100, 100) + '%';
+                // Update Progress
+                document.getElementById('goal-bar').style.width = (totalLeads/goal*100) + '%';
                 document.getElementById('goal-text').innerText = 'DAILY LEAD GOAL: ' + totalLeads + ' / ' + goal;
 
-                for(let name in data) {
-                    let updateClass = (name === updatedName) ? 'updated' : '';
-                    let points = data[name].leads + data[name].meetings + data[name].invoices;
-                    let crown = (points === maxPoints && maxPoints > 0) ? '<div class="leader-crown">👑</div>' : '';
+                // Update Individual Cards
+                for(let n in data) {
+                    const card = document.getElementById('card-' + n);
+                    const pts = data[n].leads + data[n].meetings + data[n].invoices;
                     
-                    html += '<div class="' + updateClass + '" style="background:#111; border-radius:40px; flex:1; border: 2px solid #333; display:flex; flex-direction:column; position:relative;">' +
-                            crown +
-                            '<div style="background:#222; padding:20px; font-size:4vw; font-weight:bold; color:#00ff88; border-radius: 40px 40px 0 0;">' + name + '</div>' +
-                            '<div style="flex:1; display:flex; flex-direction:column; justify-content:center; padding:20px;">' +
-                                '<div><div style="color:#aaa; font-size:2vw; font-weight:bold;">LEADS</div><div style="font-size:14vw; font-weight:900; line-height:1; color:white;">' + data[name].leads + '</div></div>' +
-                                '<div style="margin:25px 0;"><div style="color:#00e5ff; font-size:1.5vw; font-weight:bold;">MEETINGS SET</div><div style="font-size:8vw; font-weight:bold;">' + data[name].meetings + '</div></div>' +
-                                '<div><div style="color:#ff0055; font-size:1.3vw; font-weight:bold;">INVOICES</div><div style="font-size:5vw; font-weight:bold;">' + data[name].invoices + '</div></div>' +
-                            '</div></div>';
+                    document.getElementById('leads-' + n).innerText = data[n].leads;
+                    document.getElementById('meetings-' + n).innerText = data[n].meetings;
+                    document.getElementById('invoices-' + n).innerText = data[n].invoices;
+                    
+                    // Crown logic
+                    document.getElementById('crown-' + n).style.display = (pts === maxPoints && maxPoints > 0) ? 'block' : 'none';
+                    
+                    // Animation
+                    if(n === updatedName) {
+                        card.classList.remove('updated');
+                        void card.offsetWidth; // Trigger reflow
+                        card.classList.add('updated');
+                    }
                 }
-                document.getElementById('display').innerHTML = html;
             }
         </script></body>`;
 }
 
+function TEAM_NAMES_REPS() {
+    return ["Daniel", "Lucas", "Cooper"].map(n => `
+        <div id="card-${n}" class="card">
+            <div id="crown-${n}" class="leader-crown">👑</div>
+            <div style="padding:15px; font-size:3vw; color:#00ff88; font-weight:bold;">${n}</div>
+            <div id="leads-${n}" style="font-size:10vw; font-weight:900;">0</div><div style="color:#aaa;">LEADS</div>
+            <div id="meetings-${n}" style="font-size:5vw; margin-top:10px;">0</div><div style="color:#00e5ff;">MEETINGS</div>
+            <div id="invoices-${n}" style="font-size:3vw; margin-top:10px;">0</div><div style="color:#ff0055;">INVOICES</div>
+        </div>
+    `).join('');
+}
+
 function updatePortalHTML() {
-    return `<!DOCTYPE html><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <body style="font-family:sans-serif; background:#111; color:white; padding:20px; text-align:center;">
-        <div style="max-width:450px; margin:auto; background:#222; padding:30px; border-radius:20px; border:1px solid #444;">
-            <h2 style="color:white; margin-top:0; letter-spacing:1px;">Update Stats</h2>
-            <select id="n" style="font-size:1.2rem; width:100%; padding:15px; margin-bottom:20px; background:#333; color:white; border-radius:10px; border:none;">
-                <option>Daniel</option><option>Lucas</option><option>Cooper</option>
-            </select>
-            <select id="t" style="font-size:1.2rem; width:100%; padding:15px; margin-bottom:20px; background:#333; color:white; border-radius:10px; border:none;">
-                <option value="leads">Leads</option><option value="meetings">Meetings Set</option><option value="invoices">Invoices</option>
-            </select>
-            <input type="number" id="v" inputmode="numeric" placeholder="Enter Total" style="font-size:2rem; width:100%; padding:15px; margin-bottom:25px; background:#444; color:white; border-radius:10px; border:none; text-align:center;">
-            <button onclick="send()" style="background:#e31b23; color:white; width:100%; height:70px; font-size:1.6rem; font-weight:bold; border-radius:15px; border:none; box-shadow: 0 4px 15px rgba(227,27,35,0.3);">UPDATE TV</button>
+    return `<!DOCTYPE html><body style="font-family:sans-serif; background:#111; color:white; text-align:center; padding:20px;">
+        <div style="max-width:400px; margin:auto; background:#222; padding:20px; border-radius:20px;">
+            <h2>Update Stats</h2>
+            <select id="n" style="width:100%; padding:10px; margin-bottom:10px;"><option>Daniel</option><option>Lucas</option><option>Cooper</option></select>
+            <select id="t" style="width:100%; padding:10px; margin-bottom:10px;"><option value="leads">Leads</option><option value="meetings">Meetings</option><option value="invoices">Invoices</option></select>
+            <input type="number" id="v" style="width:100%; padding:10px; margin-bottom:10px;" placeholder="New Total">
+            <button onclick="send()" style="width:100%; padding:15px; background:#e31b23; color:white; border:none; border-radius:10px; font-weight:bold;">UPDATE TV</button>
         </div>
         <script src="/socket.io/socket.io.js"></script>
         <script>
             const socket = io();
             function send() {
                 const val = document.getElementById('v').value;
-                if(!val) return alert("Enter a number!");
+                if(!val) return;
                 socket.emit('updateStats', { name: document.getElementById('n').value, type: document.getElementById('t').value, val: parseInt(val) });
-                alert('Success!'); document.getElementById('v').value = '';
+                document.getElementById('v').value = '';
             }
         </script></body>`;
 }
