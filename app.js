@@ -3,7 +3,6 @@ const app = express();
 const http = require('http').Server(app);
 const io = require('socket.io')(http);
 
-// Tracked categories: Leads, Meetings, Invoices
 let stats = { 
     "Daniel": { leads: 0, meetings: 0, invoices: 0 }, 
     "Lucas": { leads: 0, meetings: 0, invoices: 0 }, 
@@ -42,11 +41,19 @@ function dashboardHTML() {
             <h1 style="font-size:3.5vw; margin:0; letter-spacing:5px; color:#00ff88;">UNISHIPPERS SALES BOARD</h1>
         </div>
         <div id="display" style="display:flex; justify-content:space-around; align-items:stretch; height:85vh; padding:30px; gap:20px;"></div>
+        
         <script src="/socket.io/socket.io.js"></script>
         <script>
             const socket = io();
-            socket.on('updateUI', (data) => { render(data.stats, data.name); });
+            const bell = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+
+            socket.on('updateUI', (data) => {
+                bell.play().catch(e => console.log("Click the screen once to enable sound!"));
+                render(data.stats, data.name);
+            });
+
             socket.on('refresh', (data) => { render(data, null); });
+
             function render(data, updatedName) {
                 let html = '';
                 for(let name in data) {
