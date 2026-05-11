@@ -21,14 +21,13 @@ io.on('connection', (socket) => {
     socket.on('updateStats', (data) => {
         if (stats[data.name]) {
             stats[data.name][data.type] = data.val; 
-            // This sends ONLY the data, not a page instruction
             io.emit('updateUI', { name: data.name, stats: stats, goal: DAILY_GOAL });
         }
     });
 });
 
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => { console.log('Board Live - No-Refresh Mode'); });
+http.listen(PORT, () => { console.log('Board Live - Fixed Overlay'); });
 
 function dashboardHTML() {
     return `<!DOCTYPE html><body style="background:#050505; color:white; font-family:sans-serif; text-align:center; margin:0; overflow:hidden;">
@@ -42,10 +41,10 @@ function dashboardHTML() {
             .updated { animation: celebrate 1.2s ease-out; }
             .card { background:#111; border-radius:30px; flex:1; border: 1px solid #333; position:relative; transition: all 0.3s ease; }
             .leader-crown { position: absolute; top: -45px; left: 50%; transform: translateX(-50%); font-size: 60px; display:none; }
-            #btn { position: fixed; inset:0; background: rgba(0,0,0,0.9); color: white; border: none; font-size: 30px; cursor: pointer; z-index: 1000; font-weight: bold; }
+            #btn-overlay { position: fixed; inset:0; background: rgba(0,0,0,0.95); color: white; border: none; font-size: 30px; cursor: pointer; z-index: 1000; font-weight: bold; display: flex; align-items: center; justify-content: center; }
         </style>
         
-        <button id="btn" onclick="startBoard()">CLICK ONCE TO START BOARD</button>
+        <div id="btn-overlay" onclick="startBoard()">CLICK ONCE TO START BOARD</div>
 
         <div style="background: #111; padding: 20px; border-bottom: 3px solid #e31b23;">
             <h1 style="font-size:3vw; margin:0; letter-spacing:3px;">SALES LEADERBOARD</h1>
@@ -56,7 +55,15 @@ function dashboardHTML() {
         </div>
 
         <div id="display" style="display:flex; justify-content:space-around; height:75vh; padding:40px 20px; gap:20px;">
-            ${TEAM_NAMES_REPS()}
+            ${["Daniel", "Lucas", "Cooper"].map(n => `
+                <div id="card-${n}" class="card">
+                    <div id="crown-${n}" class="leader-crown">👑</div>
+                    <div style="padding:15px; font-size:3vw; color:#00ff88; font-weight:bold;">${n}</div>
+                    <div id="leads-${n}" style="font-size:10vw; font-weight:900;">0</div><div style="color:#aaa;">LEADS</div>
+                    <div id="meetings-${n}" style="font-size:5vw; margin-top:10px;">0</div><div style="color:#00e5ff;">MEETINGS</div>
+                    <div id="invoices-${n}" style="font-size:3vw; margin-top:10px;">0</div><div style="color:#ff0055;">INVOICES</div>
+                </div>
+            `).join('')}
         </div>
         
         <script src="/socket.io/socket.io.js"></script>
@@ -65,13 +72,14 @@ function dashboardHTML() {
             const sound = new Audio('https://www.myinstants.com/media/sounds/level-up-191.mp3');
 
             function startBoard() {
+                // Immediately hide the overlay so it doesn't get stuck
+                document.getElementById('btn-overlay').style.display = 'none';
+                // Trigger sound permission
                 sound.play().then(() => {
                     sound.pause();
-                    document.getElementById('btn').style.display = 'none';
-                });
+                    sound.currentTime = 0;
+                }).catch(e => console.log("Audio unlock failed, but overlay is gone."));
             }
-
-            function getToday() { return new Date().toLocaleDateString(); }
 
             socket.on('requestSync', () => {
                 const localData = localStorage.getItem('unishippers_stats');
@@ -79,10 +87,9 @@ function dashboardHTML() {
             });
 
             socket.on('updateUI', (data) => {
-                // UPDATE WITHOUT REFRESHING PAGE
                 updateElements(data.stats, data.name, data.goal);
                 sound.currentTime = 0;
-                sound.play();
+                sound.play().catch(e => console.log("Sound blocked"));
                 confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
                 localStorage.setItem('unishippers_stats', JSON.stringify(data.stats));
             });
@@ -93,18 +100,15 @@ function dashboardHTML() {
                 let totalLeads = 0;
                 let maxPoints = 0;
 
-                // Calculate totals
                 for(let n in data) {
                     totalLeads += data[n].leads;
                     let p = data[n].leads + data[n].meetings + data[n].invoices;
                     if(p > maxPoints) maxPoints = p;
                 }
 
-                // Update Progress
                 document.getElementById('goal-bar').style.width = (totalLeads/goal*100) + '%';
                 document.getElementById('goal-text').innerText = 'DAILY LEAD GOAL: ' + totalLeads + ' / ' + goal;
 
-                // Update Individual Cards
                 for(let n in data) {
                     const card = document.getElementById('card-' + n);
                     const pts = data[n].leads + data[n].meetings + data[n].invoices;
@@ -113,30 +117,16 @@ function dashboardHTML() {
                     document.getElementById('meetings-' + n).innerText = data[n].meetings;
                     document.getElementById('invoices-' + n).innerText = data[n].invoices;
                     
-                    // Crown logic
                     document.getElementById('crown-' + n).style.display = (pts === maxPoints && maxPoints > 0) ? 'block' : 'none';
                     
-                    // Animation
                     if(n === updatedName) {
                         card.classList.remove('updated');
-                        void card.offsetWidth; // Trigger reflow
+                        void card.offsetWidth; 
                         card.classList.add('updated');
                     }
                 }
             }
         </script></body>`;
-}
-
-function TEAM_NAMES_REPS() {
-    return ["Daniel", "Lucas", "Cooper"].map(n => `
-        <div id="card-${n}" class="card">
-            <div id="crown-${n}" class="leader-crown">👑</div>
-            <div style="padding:15px; font-size:3vw; color:#00ff88; font-weight:bold;">${n}</div>
-            <div id="leads-${n}" style="font-size:10vw; font-weight:900;">0</div><div style="color:#aaa;">LEADS</div>
-            <div id="meetings-${n}" style="font-size:5vw; margin-top:10px;">0</div><div style="color:#00e5ff;">MEETINGS</div>
-            <div id="invoices-${n}" style="font-size:3vw; margin-top:10px;">0</div><div style="color:#ff0055;">INVOICES</div>
-        </div>
-    `).join('');
 }
 
 function updatePortalHTML() {
